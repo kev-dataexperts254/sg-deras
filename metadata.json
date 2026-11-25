@@ -1,0 +1,6 @@
+{
+  "name": "SG Collections",
+  "description": "Shop SG Deras, SG Kids Coset, and Mutumba Bales in KSh with WhatsApp checkout and Nairobi doorstep delivery via GoLink Delivery Service.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

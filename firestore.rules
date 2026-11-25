@@ -1,0 +1,206 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Health check document for connection validation
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // Shared hardened primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 2 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'machariakev254@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'category', 'description', 'price', 'salePrice',
+          'stock', 'images', 'variants', 'isNewArrival', 'isBestSeller',
+          'active', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'category', 'description', 'price', 'salePrice',
+          'stock', 'images', 'variants', 'isNewArrival', 'isBestSeller',
+          'active', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.category is string && data.category.size() >= 2 && data.category.size() <= 60
+        && data.description is string && data.description.size() >= 4 && data.description.size() <= 2000
+        && (data.price is int || data.price is float) && data.price > 0 && data.price <= 10000000
+        && (data.salePrice is int || data.salePrice is float) && data.salePrice >= 0 && data.salePrice < data.price
+        && data.stock is int && data.stock >= 0 && data.stock <= 100000
+        && data.images is list && data.images.size() >= 1 && data.images.size() <= 4
+        && data.images[0] is string && data.images[0].size() >= 1 && data.images[0].size() <= 300000
+        && data.variants is list && data.variants.size() >= 1 && data.variants.size() <= 12
+        && data.variants[0] is string && data.variants[0].size() >= 1 && data.variants[0].size() <= 60
+        && data.isNewArrival is bool
+        && data.isBestSeller is bool
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['id', 'name', 'description', 'image', 'sortOrder', 'active', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'name', 'description', 'image', 'sortOrder', 'active', 'updatedAt'])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 60
+        && data.description is string && data.description.size() <= 400
+        && data.image is string && data.image.size() <= 300000
+        && data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 1000
+        && data.active is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'id', 'orderNumber', 'customerName', 'customerPhone', 'deliveryLocation',
+          'notes', 'deliveryMethod', 'status', 'items', 'totalAmount',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'orderNumber', 'customerName', 'customerPhone', 'deliveryLocation',
+          'notes', 'deliveryMethod', 'status', 'items', 'totalAmount',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.orderNumber is string && data.orderNumber.size() >= 4 && data.orderNumber.size() <= 32
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.customerPhone is string && data.customerPhone.size() >= 7 && data.customerPhone.size() <= 30
+        && data.deliveryLocation is string && data.deliveryLocation.size() >= 2 && data.deliveryLocation.size() <= 200
+        && data.notes is string && data.notes.size() <= 400
+        && (data.deliveryMethod == 'whatsapp_standard' || data.deliveryMethod == 'golink_nairobi')
+        && (
+          data.status == 'Pending' ||
+          data.status == 'Confirmed' ||
+          data.status == 'Dispatched' ||
+          data.status == 'Delivered' ||
+          data.status == 'Cancelled'
+        )
+        && data.items is list && data.items.size() >= 1 && data.items.size() <= 50
+        && data.items[0] is map
+        && (data.totalAmount is int || data.totalAmount is float) && data.totalAmount > 0 && data.totalAmount <= 10000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'role', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 120
+        && data.role == 'admin'
+        && data.createdAt is timestamp;
+    }
+
+    // Storefront products: public read, admin-only write
+    match /products/{productId} {
+      allow get: if isValidId(productId);
+      allow list: if true;
+      allow create: if isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == productId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'category', 'description', 'price', 'salePrice', 'stock',
+          'images', 'variants', 'isNewArrival', 'isBestSeller', 'active', 'updatedAt'
+        ]);
+      allow delete: if isValidId(productId) && isAdmin();
+    }
+
+    // Storefront categories: public read, admin-only write
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId);
+      allow list: if true;
+      allow create: if isValidId(categoryId)
+        && isValidCategory(incoming())
+        && incoming().id == categoryId
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isValidId(categoryId)
+        && isValidCategory(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'description', 'image', 'sortOrder', 'active', 'updatedAt'
+        ]);
+      allow delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    // Customer orders: storefront can create Pending orders; PII strictly isolated to Admin read/update/delete
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().id == orderId
+        && incoming().status == 'Pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']);
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    // Admin registry
+    match /admins/{adminUid} {
+      allow get: if isValidId(adminUid) && isSignedIn() && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(adminUid)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == adminUid
+        && incoming().createdAt == request.time
+        && isAdmin();
+      allow update: if isValidId(adminUid)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'role']);
+      allow delete: if isValidId(adminUid) && isAdmin();
+    }
+  }
+}

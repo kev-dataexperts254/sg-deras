@@ -1,0 +1,243 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A retail or wholesale product sold by SG Collections in Kenyan Shillings.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "description": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 2000
+        },
+        "price": {
+          "type": "number"
+        },
+        "salePrice": {
+          "type": "number"
+        },
+        "stock": {
+          "type": "integer"
+        },
+        "images": {
+          "type": "array"
+        },
+        "variants": {
+          "type": "array"
+        },
+        "isNewArrival": {
+          "type": "boolean"
+        },
+        "isBestSeller": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "description",
+        "price",
+        "salePrice",
+        "stock",
+        "images",
+        "variants",
+        "isNewArrival",
+        "isBestSeller",
+        "active",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Storefront product category configuration.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "image": {
+          "type": "string",
+          "maxLength": 300000
+        },
+        "sortOrder": {
+          "type": "integer"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "image",
+        "sortOrder",
+        "active",
+        "updatedAt"
+      ]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order prepared for WhatsApp or GoLink Nairobi doorstep checkout.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "customerPhone": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 30
+        },
+        "deliveryLocation": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 200
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "deliveryMethod": {
+          "type": "string",
+          "enum": ["whatsapp_standard", "golink_nairobi"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Confirmed", "Dispatched", "Delivered", "Cancelled"]
+        },
+        "items": {
+          "type": "array"
+        },
+        "totalAmount": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "orderNumber",
+        "customerName",
+        "customerPhone",
+        "deliveryLocation",
+        "notes",
+        "deliveryMethod",
+        "status",
+        "items",
+        "totalAmount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized admin role mapping keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Public storefront catalog items managed exclusively by verified admins."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Storefront categories (SG Deras, SG Kids Coset, Mutumba Bales, and admin-managed categories)."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer checkout orders logged upon WhatsApp or GoLink dispatch; readable and updatable only by admins."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted admin allowlist records."
+    }
+  }
+}
