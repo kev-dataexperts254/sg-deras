@@ -54,9 +54,10 @@ export default function App() {
     window.location.hash === '#admin' ? 'admin' : 'store'
   );
 
-  // Firebase Auth state
+  // Firebase Auth state & Admin Bearer session token (held in memory only)
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [adminToken, setAdminToken] = useState<string | null>(null);
 
   // Live Catalog state
   const [firestoreProducts, setFirestoreProducts] = useState<Product[] | null>(null);
@@ -334,6 +335,8 @@ export default function App() {
         <AdminPortal
           user={user}
           authLoading={authLoading}
+          adminToken={adminToken}
+          onAdminTokenChange={setAdminToken}
           products={products}
           categories={categories}
           usingStarterFallback={usingStarterFallback}
