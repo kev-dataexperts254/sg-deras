@@ -1,4 +1,4 @@
-import { CategoryItem, Product } from '../types';
+import { CategoryItem, Product } from '../types.ts';
 
 export const CORE_CATEGORIES: CategoryItem[] = [
   {

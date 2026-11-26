@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import {
-  collection,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
 import { AdminPortal } from './components/AdminPortal';
 import { CartDrawer } from './components/CartDrawer';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -17,13 +8,7 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { Storefront } from './components/Storefront';
 import { StoreHeader } from './components/StoreHeader';
 import { CORE_CATEGORIES, STARTER_PRODUCTS } from './data/seedCatalog';
-import {
-  auth,
-  db,
-  handleFirestoreError,
-  OperationType,
-  testFirestoreConnection,
-} from './lib/firebase';
+import { auth } from './lib/firebase';
 import {
   CartEntry,
   CategoryItem,
@@ -54,14 +39,14 @@ export default function App() {
     window.location.hash === '#admin' ? 'admin' : 'store'
   );
 
-  // Firebase Auth state & Admin Bearer session token (held in memory only)
+  // Firebase Auth state (token kept in memory only) & Admin Bearer session token
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [adminToken, setAdminToken] = useState<string | null>(null);
 
-  // Live Catalog state
-  const [firestoreProducts, setFirestoreProducts] = useState<Product[] | null>(null);
-  const [firestoreCategories, setFirestoreCategories] = useState<CategoryItem[] | null>(null);
+  // Catalog state loaded from PostgreSQL (/api/store/bootstrap)
+  const [dbProducts, setDbProducts] = useState<Product[] | null>(null);
+  const [dbCategories, setDbCategories] = useState<CategoryItem[] | null>(null);
 
   // Storefront browsing state
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -101,48 +86,50 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // Boot Firestore connection check & Auth listener
-  useEffect(() => {
-    void testFirestoreConnection();
-    const unsubAuth = onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser);
-      setAuthLoading(false);
-    });
-    return () => unsubAuth();
+  // Load live catalog from PostgreSQL
+  const refreshCatalog = useCallback(async () => {
+    try {
+      const res = await fetch('/api/store/bootstrap');
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        products?: Product[];
+        categories?: CategoryItem[];
+      };
+      if (Array.isArray(data.products)) {
+        setDbProducts(data.products);
+      }
+      if (Array.isArray(data.categories)) {
+        setDbCategories(data.categories);
+      }
+    } catch {
+      // Keep graceful starter catalog fallback if API is momentarily unreachable
+    }
   }, []);
 
-  // Live Firestore subscriptions for products & categories
   useEffect(() => {
-    const productsQuery = query(collection(db, 'products'));
-    const unsubProducts = onSnapshot(
-      productsQuery,
-      (snapshot) => {
-        const items: Product[] = snapshot.docs.map((d) => d.data() as Product);
-        setFirestoreProducts(items);
-      },
-      (err) => {
-        console.error('Products listener error:', err);
-        setFirestoreProducts([]);
-      }
-    );
+    void refreshCatalog();
+  }, [refreshCatalog]);
 
-    const categoriesQuery = query(collection(db, 'categories'), orderBy('sortOrder', 'asc'));
-    const unsubCategories = onSnapshot(
-      categoriesQuery,
-      (snapshot) => {
-        const cats: CategoryItem[] = snapshot.docs.map((d) => d.data() as CategoryItem);
-        setFirestoreCategories(cats);
-      },
-      (err) => {
-        console.error('Categories listener error:', err);
-        setFirestoreCategories([]);
+  // Firebase Auth listener (syncs signed-in users to PostgreSQL users table)
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, async (nextUser) => {
+      setUser(nextUser);
+      setAuthLoading(false);
+      if (nextUser) {
+        try {
+          const idToken = await nextUser.getIdToken();
+          await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+            },
+          });
+        } catch {
+          // Non-fatal background user sync
+        }
       }
-    );
-
-    return () => {
-      unsubProducts();
-      unsubCategories();
-    };
+    });
+    return () => unsubAuth();
   }, []);
 
   // Persist cart, wishlist, and customer info locally
@@ -170,22 +157,21 @@ export default function App() {
     }
   }, [customerDetails]);
 
-  const usingStarterFallback =
-    firestoreProducts === null || firestoreProducts.length === 0;
+  const usingStarterFallback = dbProducts === null || dbProducts.length === 0;
 
   const products: Product[] = useMemo(() => {
-    if (firestoreProducts && firestoreProducts.length > 0) {
-      return firestoreProducts;
+    if (dbProducts && dbProducts.length > 0) {
+      return dbProducts;
     }
     return STARTER_PRODUCTS;
-  }, [firestoreProducts]);
+  }, [dbProducts]);
 
   const categories: CategoryItem[] = useMemo(() => {
-    if (firestoreCategories && firestoreCategories.length > 0) {
-      return firestoreCategories;
+    if (dbCategories && dbCategories.length > 0) {
+      return dbCategories;
     }
     return CORE_CATEGORIES;
-  }, [firestoreCategories]);
+  }, [dbCategories]);
 
   const categoryNames = useMemo(
     () => categories.filter((c) => c.active !== false).map((c) => c.name),
@@ -293,39 +279,42 @@ export default function App() {
     deliveryMethod: DeliveryMethod
   ): Promise<void> => {
     const orderId = sanitizeSlugId(`${orderNumber}-${Date.now()}`);
-    const orderPath = `orders/${orderId}`;
+    const safeName = customer.name.trim() || 'WhatsApp Shopper';
+    const safePhone = customer.phone.trim().length >= 7 ? customer.phone.trim() : 'Via WhatsApp';
+    const deliveryLocation =
+      (
+        customer.location.trim() ||
+        (deliveryMethod === 'golink_nairobi'
+          ? 'Nairobi Doorstep (Confirm estate)'
+          : 'To be confirmed')
+      ).slice(0, 200);
+
     try {
-      const safeName = customer.name.trim() || 'WhatsApp Shopper';
-      const safePhone = customer.phone.trim().length >= 7 ? customer.phone.trim() : 'Via WhatsApp';
-      await setDoc(doc(db, 'orders', orderId), {
-        id: orderId,
-        orderNumber: orderNumber.slice(0, 32),
-        customerName: safeName.slice(0, 100),
-        customerPhone: safePhone.slice(0, 30),
-        deliveryLocation:
-          (customer.location.trim() ||
-            (deliveryMethod === 'golink_nairobi'
-              ? 'Nairobi Doorstep (Confirm estate)'
-              : 'To be confirmed')
-          ).slice(0, 200),
-        notes: customer.notes.trim().slice(0, 400),
-        deliveryMethod,
-        status: 'Pending',
-        items: items.slice(0, 50).map((item) => ({
-          productId: item.product.id,
-          name: item.product.name.slice(0, 120),
-          category: item.product.category.slice(0, 60),
-          variant: item.variant.slice(0, 60),
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.lineTotal,
-        })),
-        totalAmount,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: orderId,
+          orderNumber: orderNumber.slice(0, 32),
+          customerName: safeName.slice(0, 100),
+          customerPhone: safePhone.slice(0, 30),
+          deliveryLocation,
+          notes: customer.notes.trim().slice(0, 400),
+          deliveryMethod,
+          items: items.slice(0, 50).map((item) => ({
+            productId: item.product.id,
+            name: item.product.name.slice(0, 120),
+            category: item.product.category.slice(0, 60),
+            variant: item.variant.slice(0, 60),
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            lineTotal: item.lineTotal,
+          })),
+          totalAmount,
+        }),
       });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, orderPath);
+    } catch {
+      // Never block WhatsApp checkout if order logging fails transiently
     }
   };
 
@@ -340,6 +329,7 @@ export default function App() {
           products={products}
           categories={categories}
           usingStarterFallback={usingStarterFallback}
+          onRefreshCatalog={refreshCatalog}
           onExitAdmin={() => navigateTo('store')}
         />
       ) : (

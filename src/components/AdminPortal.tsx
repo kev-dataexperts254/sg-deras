@@ -1,20 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
-import {
   ArrowLeft,
   CheckCircle2,
-  Cloud,
   Database,
   Edit3,
   Eye,
@@ -33,14 +21,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { CORE_CATEGORIES, STARTER_PRODUCTS } from '../data/seedCatalog';
-import {
-  db,
-  isAuthorizedAdminUser,
-  PRIMARY_ADMIN_EMAIL,
-  signInAdminWithGoogle,
-  signOutAdmin,
-} from '../lib/firebase';
+import { signInAdminWithGoogle, signOutAdmin } from '../lib/firebase';
 import { CategoryItem, Order, OrderStatus, Product } from '../types';
 import {
   buildWhatsAppUrl,
@@ -59,6 +40,7 @@ interface AdminPortalProps {
   products: Product[];
   categories: CategoryItem[];
   usingStarterFallback: boolean;
+  onRefreshCatalog: () => Promise<void>;
   onExitAdmin: () => void;
 }
 
@@ -80,6 +62,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   products,
   categories,
   usingStarterFallback,
+  onRefreshCatalog,
   onExitAdmin,
 }) => {
   // Server-verified custom username/password state
@@ -104,10 +87,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Firebase Cloud Database sync state
-  const [hasAdminDoc, setHasAdminDoc] = useState(false);
-  const [cloudConnecting, setCloudConnecting] = useState(false);
-  const [cloudError, setCloudError] = useState('');
+  // Optional Google Auth sync state
+  const [googleConnecting, setGoogleConnecting] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -142,7 +124,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [savingCat, setSavingCat] = useState(false);
 
-  const isFirebaseAdmin = isAuthorizedAdminUser(user, hasAdminDoc);
   const isPortalAuthenticated = Boolean(adminToken && adminUsername);
 
   const showNotice = (msg: string) => {
@@ -189,47 +170,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     void refreshAdminStatus();
   }, [refreshAdminStatus]);
 
-  // Check optional /admins/{uid} record when Firebase Google user is signed in
-  useEffect(() => {
-    if (!user) {
-      setHasAdminDoc(false);
-      return;
-    }
-    const adminRef = doc(db, 'admins', user.uid);
-    const unsub = onSnapshot(
-      adminRef,
-      (snap) => {
-        setHasAdminDoc(snap.exists());
-      },
-      () => {
-        setHasAdminDoc(false);
-      }
-    );
-    return () => unsub();
-  }, [user]);
-
-  // Listen to orders ONLY when both Portal Authenticated AND Firebase Admin verified
-  useEffect(() => {
-    if (!isPortalAuthenticated || !isFirebaseAdmin) {
+  const fetchOrders = useCallback(async () => {
+    if (!adminToken) {
       setOrders([]);
       return;
     }
     setOrdersLoading(true);
-    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const loaded: Order[] = snap.docs.map((d) => d.data() as Order);
-        setOrders(loaded);
-        setOrdersLoading(false);
-      },
-      (err) => {
-        setOrdersLoading(false);
-        setCloudError(err.message || 'Unable to load orders from Cloud Firestore.');
+    try {
+      const res = await fetch('/api/admin/orders', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const data = (await res.json()) as { orders?: Order[]; error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to load orders.');
       }
-    );
-    return () => unsub();
-  }, [isPortalAuthenticated, isFirebaseAdmin]);
+      setOrders(Array.isArray(data.orders) ? data.orders : []);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to load customer orders.');
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    if (isPortalAuthenticated) {
+      void fetchOrders();
+      void onRefreshCatalog();
+    } else {
+      setOrders([]);
+    }
+  }, [isPortalAuthenticated, fetchOrders, onRefreshCatalog]);
 
   const handleFirstRunSetup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,49 +339,41 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  const handleConnectCloudDatabase = async () => {
-    setCloudError('');
-    setCloudConnecting(true);
+  const handleGoogleAccountSync = async () => {
+    setActionError('');
+    setGoogleConnecting(true);
     try {
-      await signInAdminWithGoogle();
+      const signedUser = await signInAdminWithGoogle();
+      const idToken = await signedUser.getIdToken();
+      await fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      showNotice(`Google account ${signedUser.email} synced.`);
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Google verification cancelled or failed.');
+      setActionError(err instanceof Error ? err.message : 'Google verification cancelled or failed.');
     } finally {
-      setCloudConnecting(false);
+      setGoogleConnecting(false);
     }
-  };
-
-  const ensureCloudSyncReady = (setErrorFn?: (msg: string) => void): boolean => {
-    if (!isFirebaseAdmin) {
-      const msg =
-        'Cloud Database is not connected yet. Click "Connect Cloud Database" at the top to authorize Firestore writes.';
-      if (setErrorFn) setErrorFn(msg);
-      else setCloudError(msg);
-      return false;
-    }
-    return true;
   };
 
   const handleSeedCatalog = async () => {
-    if (!ensureCloudSyncReady()) return;
+    if (!adminToken) return;
     setSeeding(true);
+    setActionError('');
     try {
-      for (const cat of CORE_CATEGORIES) {
-        await setDoc(doc(db, 'categories', cat.id), {
-          ...cat,
-          updatedAt: serverTimestamp(),
-        });
+      const res = await fetch('/api/admin/seed', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to sync starter catalog.');
       }
-      for (const prod of STARTER_PRODUCTS) {
-        await setDoc(doc(db, 'products', prod.id), {
-          ...prod,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
-      showNotice('Starter catalog & 3 core categories saved to Firestore.');
+      await onRefreshCatalog();
+      showNotice('Starter catalog & 3 core categories saved.');
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Unable to sync starter catalog.');
+      setActionError(err instanceof Error ? err.message : 'Unable to sync starter catalog.');
     } finally {
       setSeeding(false);
     }
@@ -496,7 +458,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ensureCloudSyncReady(setProdError)) return;
+    if (!adminToken) return;
 
     const priceNum = Number(prodPrice);
     const saleNum = prodSalePrice.trim() ? Number(prodSalePrice) : 0;
@@ -540,25 +502,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setSavingProduct(true);
     try {
       const id = editingProductId || sanitizeSlugId(`${prodName}-${Date.now().toString().slice(-4)}`);
-      const existing = products.find((p) => p.id === id);
-
-      if (editingProductId && !usingStarterFallback && existing?.createdAt) {
-        await updateDoc(doc(db, 'products', id), {
-          name: prodName.trim().slice(0, 120),
-          category: prodCategory.trim().slice(0, 60),
-          description: prodDesc.trim().slice(0, 2000),
-          price: Math.round(priceNum),
-          salePrice: Math.round(saleNum),
-          stock: stockNum,
-          images: prodImages.slice(0, 4),
-          variants: variantsList,
-          isNewArrival: prodNewArrival,
-          isBestSeller: prodBestSeller,
-          active: prodActive,
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        await setDoc(doc(db, 'products', id), {
+      const res = await fetch('/api/admin/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
           id,
           name: prodName.trim().slice(0, 120),
           category: prodCategory.trim().slice(0, 60),
@@ -571,11 +521,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           isNewArrival: prodNewArrival,
           isBestSeller: prodBestSeller,
           active: prodActive,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        }),
+      });
+
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to save product.');
       }
 
+      await onRefreshCatalog();
       setShowProductForm(false);
       resetProductForm();
       showNotice(editingProductId ? 'Product updated in store.' : 'New product published to store.');
@@ -587,41 +541,49 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    if (!ensureCloudSyncReady()) return;
+    if (!adminToken) return;
     try {
-      await deleteDoc(doc(db, 'products', productId));
+      const res = await fetch(`/api/admin/products/${encodeURIComponent(productId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to delete product.');
+      }
+      await onRefreshCatalog();
       showNotice('Product removed.');
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Unable to delete product.');
+      setActionError(err instanceof Error ? err.message : 'Unable to delete product.');
     }
   };
 
   const handleQuickStockAdjust = async (product: Product, nextStock: number) => {
-    if (!ensureCloudSyncReady()) return;
+    if (!adminToken) return;
     const clamped = Math.max(0, nextStock);
     try {
-      if (usingStarterFallback) {
-        await setDoc(doc(db, 'products', product.id), {
-          ...product,
-          stock: clamped,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        await updateDoc(doc(db, 'products', product.id), {
-          stock: clamped,
-          updatedAt: serverTimestamp(),
-        });
+      const res = await fetch(`/api/admin/products/${encodeURIComponent(product.id)}/stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ stock: clamped }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to update stock.');
       }
+      await onRefreshCatalog();
       showNotice(`Stock updated for ${product.name}.`);
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Unable to update stock.');
+      setActionError(err instanceof Error ? err.message : 'Unable to update stock.');
     }
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ensureCloudSyncReady() || catName.trim().length < 2) return;
+    if (!adminToken || catName.trim().length < 2) return;
     setSavingCat(true);
     try {
       const id = editingCatId || sanitizeSlugId(catName);
@@ -630,47 +592,80 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           ? catImage.trim()
           : '/src/assets/images/product_dera_crimson_1795635218722.jpg';
 
-      await setDoc(doc(db, 'categories', id), {
-        id,
-        name: catName.trim().slice(0, 60),
-        description: catDesc.trim().slice(0, 400),
-        image: imageSafe,
-        sortOrder: categories.length + 1,
-        active: true,
-        updatedAt: serverTimestamp(),
+      const res = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          id,
+          name: catName.trim().slice(0, 60),
+          description: catDesc.trim().slice(0, 400),
+          image: imageSafe,
+          sortOrder: editingCatId
+            ? categories.find((c) => c.id === editingCatId)?.sortOrder ?? categories.length + 1
+            : categories.length + 1,
+          active: true,
+        }),
       });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to save category.');
+      }
+
+      await onRefreshCatalog();
       setCatName('');
       setCatDesc('');
       setCatImage('');
       setEditingCatId(null);
       showNotice('Category saved.');
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Unable to save category.');
+      setActionError(err instanceof Error ? err.message : 'Unable to save category.');
     } finally {
       setSavingCat(false);
     }
   };
 
   const handleDeleteCategory = async (catId: string) => {
-    if (!ensureCloudSyncReady()) return;
+    if (!adminToken) return;
     try {
-      await deleteDoc(doc(db, 'categories', catId));
+      const res = await fetch(`/api/admin/categories/${encodeURIComponent(catId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to delete category.');
+      }
+      await onRefreshCatalog();
       showNotice('Category deleted.');
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Unable to delete category.');
+      setActionError(err instanceof Error ? err.message : 'Unable to delete category.');
     }
   };
 
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
-    if (!ensureCloudSyncReady()) return;
+    if (!adminToken) return;
     try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status,
-        updatedAt: serverTimestamp(),
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ status }),
       });
+      const data = (await res.json()) as { error?: string; order?: Order };
+      if (!res.ok) {
+        throw new Error(data.error || 'Unable to update order status.');
+      }
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+      );
       showNotice(`Order updated to ${status}.`);
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Unable to update order status.');
+      setActionError(err instanceof Error ? err.message : 'Unable to update order status.');
     }
   };
 
@@ -683,7 +678,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     );
   }
 
-  // Gate 1: Username & Password Login (or First-Run Claim Setup)
+  // Gate: Username & Password Login (or First-Run Claim Setup)
   if (!isPortalAuthenticated) {
     return (
       <div className="min-h-screen bg-stone-100 flex flex-col justify-center items-center p-4 sm:p-6">
@@ -928,53 +923,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {/* Cloud Firestore Database Sync Status Banner */}
-        {!authLoading && !isFirebaseAdmin && (
-          <div className="bg-white border border-stone-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-            <div className="flex items-start gap-3">
-              <Cloud className="w-5 h-5 text-red-700 shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-semibold text-zinc-950">
-                  Connect Cloud Database Sync ({PRIMARY_ADMIN_EMAIL})
-                </p>
-                <p className="text-xs text-zinc-600 mt-0.5">
-                  {user && !isFirebaseAdmin
-                    ? `Signed in to Google as ${user.email}, which is not authorized for Firestore writes. Switch to ${PRIMARY_ADMIN_EMAIL}.`
-                    : 'Your Cloud Firestore security rules require a one-click Google verification to publish product/price updates and view customer orders.'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {user && !isFirebaseAdmin && (
-                <button
-                  type="button"
-                  onClick={signOutAdmin}
-                  className="px-3 py-2 text-xs font-semibold text-zinc-700 border border-stone-300 rounded-lg hover:bg-stone-50"
-                >
-                  Switch Google Account
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={cloudConnecting}
-                onClick={handleConnectCloudDatabase}
-                className="px-4 py-2.5 bg-zinc-950 hover:bg-red-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
-              >
-                {cloudConnecting ? 'Connecting...' : 'Connect Cloud Database'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {cloudError && (
+        {actionError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs text-red-800">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0" />
-              <span>{cloudError}</span>
+              <span>{actionError}</span>
             </div>
             <button
               type="button"
-              onClick={() => setCloudError('')}
+              onClick={() => setActionError('')}
               className="font-semibold underline shrink-0"
             >
               Dismiss
@@ -982,12 +939,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         )}
 
-        {isFirebaseAdmin && usingStarterFallback && (
+        {usingStarterFallback && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="text-sm text-amber-950">
-              <p className="font-semibold">Cloud Catalog Not Seeded Yet</p>
+              <p className="font-semibold">Starter Catalog Ready</p>
               <p className="text-xs text-amber-800 mt-0.5">
-                Sync the starter SG Deras, SG Kids Coset, and Mutumba Bales catalog to your Firestore database so all edits persist live.
+                Sync the starter SG Deras, SG Kids Coset, and Mutumba Bales items into your database so every edit saves live.
               </p>
             </div>
             <button
@@ -997,7 +954,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               className="px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold rounded-lg flex items-center gap-2 whitespace-nowrap shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${seeding ? 'animate-spin' : ''}`} />
-              <span>{seeding ? 'Syncing...' : 'Sync Starter Catalog to Cloud'}</span>
+              <span>{seeding ? 'Syncing...' : 'Sync Starter Catalog'}</span>
             </button>
           </div>
         )}
@@ -1565,30 +1522,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   Orders logged when customers click WhatsApp Checkout or GoLink Delivery Service.
                 </p>
               </div>
-              <select
-                value={orderStatusFilter}
-                onChange={(e) => setOrderStatusFilter(e.target.value)}
-                className="px-3 py-2 text-xs font-semibold bg-white border border-stone-300 rounded-lg"
-              >
-                <option value="All">All Statuses</option>
-                {ORDER_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void fetchOrders()}
+                  className="px-3 py-2 text-xs font-semibold bg-white border border-stone-300 rounded-lg hover:bg-stone-50 flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${ordersLoading ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  className="px-3 py-2 text-xs font-semibold bg-white border border-stone-300 rounded-lg"
+                >
+                  <option value="All">All Statuses</option>
+                  {ORDER_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            {!isFirebaseAdmin ? (
-              <div className="bg-white border border-stone-200 rounded-2xl p-8 text-center space-y-3">
-                <p className="text-sm font-semibold text-zinc-900">
-                  Connect Cloud Database to view customer orders
-                </p>
-                <p className="text-xs text-zinc-600 max-w-md mx-auto">
-                  Customer order details are protected in Cloud Firestore. Click Connect Cloud Database above to verify your Google admin account ({PRIMARY_ADMIN_EMAIL}).
-                </p>
-              </div>
-            ) : ordersLoading ? (
+            {ordersLoading ? (
               <p className="text-sm text-zinc-500 py-10 text-center">Loading customer orders...</p>
             ) : filteredOrders.length === 0 ? (
               <div className="bg-white border border-stone-200 rounded-2xl p-10 text-center text-sm text-zinc-500">
@@ -1701,7 +1659,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
               {envOverride && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950">
-                  Your admin password is currently set via the <code>ADMIN_PASSWORD</code> environment secret. Update or remove that secret in Settings &rarr; Secrets to manage passwords from here.
+                  Your admin password is currently set via the <code>ADMIN_PASSWORD</code> environment secret. Update or remove that secret in your hosting environment to manage passwords from here.
                 </div>
               )}
 
@@ -1775,31 +1733,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
             <div className="bg-white border border-stone-200 rounded-2xl p-6 space-y-4 self-start">
               <h3 className="font-display text-lg font-bold text-zinc-950">
-                Cloud Database Sync Status
+                Optional Google Account Sync
               </h3>
               <p className="text-sm text-zinc-600 leading-relaxed">
-                {isFirebaseAdmin
-                  ? `Connected to Cloud Firestore as ${user?.email}. Product edits, photo uploads, category updates, and order status changes persist immediately.`
-                  : `Your admin portal session is active, and you can connect your Google Admin account (${PRIMARY_ADMIN_EMAIL}) below whenever you want to publish catalog edits to Firestore.`}
+                {user
+                  ? `Signed in with Google as ${user.email}. Your account profile is synchronized with Firebase Authentication.`
+                  : 'Link a Google account via Firebase Authentication if you want an additional verified identity record.'}
               </p>
-              {isFirebaseAdmin ? (
-                <button
-                  type="button"
-                  onClick={signOutAdmin}
-                  className="px-4 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-zinc-700 hover:bg-stone-50"
-                >
-                  Disconnect Google Cloud Sync
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={cloudConnecting}
-                  onClick={handleConnectCloudDatabase}
-                  className="px-4 py-2.5 rounded-lg bg-zinc-950 hover:bg-red-700 text-white text-xs font-semibold"
-                >
-                  {cloudConnecting ? 'Connecting...' : 'Connect Cloud Database'}
-                </button>
-              )}
+              {!authLoading &&
+                (user ? (
+                  <button
+                    type="button"
+                    onClick={signOutAdmin}
+                    className="px-4 py-2 rounded-lg border border-stone-300 text-xs font-semibold text-zinc-700 hover:bg-stone-50"
+                  >
+                    Sign Out Google Account
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={googleConnecting}
+                    onClick={handleGoogleAccountSync}
+                    className="px-4 py-2.5 rounded-lg bg-zinc-950 hover:bg-red-700 text-white text-xs font-semibold"
+                  >
+                    {googleConnecting ? 'Connecting...' : 'Sign In with Google'}
+                  </button>
+                ))}
             </div>
           </div>
         )}
@@ -1812,15 +1771,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </h2>
             <div className="space-y-4 text-sm text-zinc-600 leading-relaxed">
               <div>
-                <h3 className="font-semibold text-zinc-950">1. Server-Verified Username &amp; Password Login</h3>
+                <h3 className="font-semibold text-zinc-950">1. Server-Verified Admin Login</h3>
                 <p>
-                  Admin portal sign-in is handled by the Express backend (`server.ts`) using salted cryptographic password hashing (`scrypt`) and signed session tokens. Passwords can be updated anytime from the <strong>Password &amp; Security</strong> tab.
+                  Admin portal sign-in is handled by the Express backend using salted cryptographic password hashing (`scrypt`) stored in PostgreSQL and HMAC-signed session tokens held in memory. Passwords can be updated anytime from the <strong>Password &amp; Security</strong> tab.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-zinc-950">2. Cloud Database (Firebase Firestore)</h3>
+                <h3 className="font-semibold text-zinc-950">2. PostgreSQL &amp; Drizzle ORM Persistence</h3>
                 <p>
-                  All products, KSh regular &amp; sale prices, stock levels, categories, uploaded product photos, and customer orders are stored in Google Cloud Firestore with hardened security rules (`firestore.rules`).
+                  All products, KSh regular and sale prices, stock counts, categories, uploaded product photos, and customer orders persist in PostgreSQL managed through Drizzle ORM. If deploying outside Google Cloud Run/AI Studio (for example on Vercel with Neon), provide your target PostgreSQL host credentials (`SQL_HOST`, `SQL_USER`, `SQL_PASSWORD`, `SQL_DB_NAME`) and `SESSION_SECRET` in your project environment variables.
                 </p>
               </div>
               <div>
