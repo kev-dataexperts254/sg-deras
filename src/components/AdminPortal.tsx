@@ -1779,7 +1779,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <div>
                 <h3 className="font-semibold text-zinc-950">2. PostgreSQL &amp; Drizzle ORM Persistence</h3>
                 <p>
-                  All products, KSh regular and sale prices, stock counts, categories, uploaded product photos, and customer orders persist in PostgreSQL managed through Drizzle ORM. If deploying outside Google Cloud Run/AI Studio (for example on Vercel with Neon), provide your target PostgreSQL host credentials (`SQL_HOST`, `SQL_USER`, `SQL_PASSWORD`, `SQL_DB_NAME`) and `SESSION_SECRET` in your project environment variables.
+                  All products, KSh regular and sale prices, stock counts, categories, uploaded product photos, and customer orders persist in PostgreSQL managed through Drizzle ORM. When deploying to Vercel with Neon, configure DATABASE_URL with your Neon PostgreSQL connection string and SESSION_SECRET in your project environment variables. 
                 </p>
               </div>
               <div>
