@@ -63,8 +63,8 @@ export function buildOrderWhatsAppMessage(
 ): string {
   const header =
     deliveryMethod === 'golink_nairobi'
-      ? `*GOLINK NAIROBI DOORSTEP DELIVERY REQUEST*\n*SG Collections Order:* ${orderNumber}\n_Doorstep delivery within Nairobi_`
-      : `*NEW ORDER — SG COLLECTIONS*\n*Order Ref:* ${orderNumber}`;
+      ? `*GOLINK NAIROBI DOORSTEP DELIVERY REQUEST*\n*SG Wholesalers Order:* ${orderNumber}\n_Doorstep delivery within Nairobi_`
+      : `*NEW ORDER — SG WHOLESALERS*\n*Order Ref:* ${orderNumber}`;
 
   const itemLines = items
     .map(

@@ -45,7 +45,7 @@ export const StoreHeader: React.FC<StoreHeaderProps> = ({
         <div className="bg-gradient-to-r from-red-700 via-red-600 to-amber-600 text-white px-4 py-1.5 text-xs flex items-center justify-between gap-4">
           <div className="w-4 shrink-0 hidden sm:block" aria-hidden="true" />
           <p className="text-center font-medium truncate">
-            We deliver worldwide kwa uaminifu · Fast Nairobi doorstep delivery via GoLink · Prices in KSh
+            We deliver countrywide and world wide · Fast Nairobi doorstep delivery at checkout · Prices in KSh
           </p>
           <button
             type="button"
@@ -76,11 +76,11 @@ export const StoreHeader: React.FC<StoreHeaderProps> = ({
           >
             <img
               src="/assets/aistudio/image_5584599e.png"
-              alt="SG Collections Logo"
+              alt="SG Wholesalers Logo"
               className="w-9 h-9 rounded-lg object-cover bg-black shrink-0 border border-stone-200"
             />
             <span className="font-display text-lg sm:text-xl font-bold tracking-tight text-zinc-950">
-              SG Collections
+              SG Wholesalers
             </span>
           </button>
         </div>

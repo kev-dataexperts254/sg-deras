@@ -3,9 +3,7 @@ import {
   ArrowRight,
   Globe,
   Heart,
-  MapPin,
   MessageCircle,
-  Phone,
   RotateCcw,
   ShieldCheck,
   Sparkles,
@@ -17,8 +15,6 @@ import {
   buildWhatsAppUrl,
   formatKSh,
   getEffectivePrice,
-  GOLINK_WHATSAPP_DISPLAY,
-  GOLINK_WHATSAPP_NUMBER,
   STORE_WHATSAPP_DISPLAY,
   STORE_WHATSAPP_NUMBER,
 } from '../utils/formatters';
@@ -122,7 +118,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
         <div className="relative rounded-2xl overflow-hidden bg-[#F3EFE8] border border-stone-200 min-h-[380px] sm:min-h-[440px] lg:min-h-[480px] flex items-center">
           <img
             src="/src/assets/images/hero_sg_collections_1795635219118.jpg"
-            alt="SG Collections Silk Dera Collection"
+            alt="SG Wholesalers Silk Dera Collection"
             referrerPolicy="no-referrer"
             className="absolute inset-0 w-full h-full object-cover object-center lg:object-right"
           />
@@ -133,9 +129,9 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
           <div className="relative z-10 max-w-xl p-6 sm:p-10 lg:p-14 space-y-5">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-red-700">
-              <span>SG Collections Nairobi</span>
+              <span>SG Wholesalers Nairobi</span>
               <span aria-hidden="true">·</span>
-              <span>We deliver world wide kwa uaminifu</span>
+              <span>We deliver countrywide and world wide</span>
             </div>
 
             <h1 className="font-display text-3xl sm:text-5xl font-bold text-zinc-950 leading-[1.08] text-balance">
@@ -489,15 +485,15 @@ export const Storefront: React.FC<StorefrontProps> = ({
           <div className="flex items-start gap-3">
             <Truck className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold">GoLink Nairobi Express</p>
-              <p className="text-xs text-white/80 mt-0.5">Fast doorstep delivery within Nairobi</p>
+              <p className="text-sm font-semibold">Nairobi Express Delivery</p>
+              <p className="text-xs text-white/80 mt-0.5">Same-day doorstep option at checkout</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
             <Globe className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold">Worldwide Dispatch</p>
-              <p className="text-xs text-white/80 mt-0.5">We deliver world wide kwa uaminifu</p>
+              <p className="text-sm font-semibold">Countrywide &amp; Worldwide</p>
+              <p className="text-xs text-white/80 mt-0.5">We deliver countrywide and world wide</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -571,41 +567,19 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
       {/* 6. Delivery, Returns & Contact Details */}
       <section id="delivery-returns" className="bg-stone-50 border-t border-stone-200 py-14 mt-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="bg-white border border-stone-200 rounded-2xl p-6 space-y-3">
-            <div className="flex items-center gap-2.5 text-zinc-950 font-semibold">
-              <MapPin className="w-5 h-5 text-red-700" />
-              <h3>Nairobi Doorstep via GoLink</h3>
-            </div>
-            <p className="text-sm text-zinc-600 leading-relaxed">
-              Need your order urgently within Nairobi? Use the <strong>GoLink Delivery Service</strong> button inside your Shopping Bag for direct rider dispatch across Nairobi estates.
-            </p>
-            <a
-              href={buildWhatsAppUrl(
-                GOLINK_WHATSAPP_NUMBER,
-                'Hello GoLink Delivery Service, I would like to inquire about Nairobi doorstep delivery for an SG Collections order.'
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 hover:text-red-800"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              <span>GoLink Dispatch: {GOLINK_WHATSAPP_DISPLAY}</span>
-            </a>
-          </div>
-
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white border border-stone-200 rounded-2xl p-6 space-y-3">
             <div className="flex items-center gap-2.5 text-zinc-950 font-semibold">
               <Globe className="w-5 h-5 text-amber-700" />
-              <h3>Upcountry &amp; Worldwide Delivery</h3>
+              <h3>Countrywide &amp; Worldwide Delivery</h3>
             </div>
             <p className="text-sm text-zinc-600 leading-relaxed">
-              We deliver across Kenya (Mombasa, Kisumu, Nakuru, Eldoret, Thika) via trusted parcel couriers and ship internationally <em>kwa uaminifu</em> via DHL &amp; air cargo.
+              We deliver across Kenya via trusted parcel couriers and ship internationally via DHL &amp; air cargo.
             </p>
             <a
               href={buildWhatsAppUrl(
                 STORE_WHATSAPP_NUMBER,
-                'Hello SG Collections, I would like shipping rates for my location.'
+                'Hello SG Wholesalers, I would like shipping rates for my location.'
               )}
               target="_blank"
               rel="noopener noreferrer"
@@ -638,12 +612,12 @@ export const Storefront: React.FC<StorefrontProps> = ({
             <div className="flex items-center gap-3">
               <img
                 src="/assets/aistudio/image_5584599e.png"
-                alt="SG Collections"
+                alt="SG Wholesalers"
                 className="w-11 h-11 rounded-lg object-cover bg-black border border-zinc-800"
               />
               <div>
-                <p className="font-display text-lg font-bold text-white">SG Collections</p>
-                <p className="text-xs text-amber-400">We deliver world wide kwa uaminifu</p>
+                <p className="font-display text-lg font-bold text-white">SG Wholesalers</p>
+                <p className="text-xs text-amber-400">We deliver countrywide and world wide</p>
               </div>
             </div>
             <p className="text-xs text-zinc-400 max-w-sm leading-relaxed">
@@ -682,22 +656,12 @@ export const Storefront: React.FC<StorefrontProps> = ({
             <ul className="space-y-2 text-xs">
               <li>
                 <a
-                  href={buildWhatsAppUrl(STORE_WHATSAPP_NUMBER, 'Hello SG Collections!')}
+                  href={buildWhatsAppUrl(STORE_WHATSAPP_NUMBER, 'Hello SG Wholesalers!')}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition-colors"
                 >
                   Orders WhatsApp: {STORE_WHATSAPP_DISPLAY}
-                </a>
-              </li>
-              <li>
-                <a
-                  href={buildWhatsAppUrl(GOLINK_WHATSAPP_NUMBER, 'Hello GoLink Delivery Service!')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-white transition-colors"
-                >
-                  GoLink Nairobi: {GOLINK_WHATSAPP_DISPLAY}
                 </a>
               </li>
               <li>
@@ -714,7 +678,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
-          <p>&copy; {new Date().getFullYear()} SG Collections. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} SG Wholesalers. All rights reserved.</p>
           <p>Prices shown in Kenyan Shillings (KSh)</p>
         </div>
       </footer>

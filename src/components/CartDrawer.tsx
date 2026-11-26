@@ -188,7 +188,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <p className="text-emerald-800 mt-1">
                     {lastSubmitted.deliveryMethod === 'golink_nairobi'
                       ? `Prepared for GoLink Delivery Service (${GOLINK_WHATSAPP_DISPLAY}) — Nairobi doorstep delivery.`
-                      : `Prepared for SG Collections (${STORE_WHATSAPP_DISPLAY}).`}{' '}
+                      : `Prepared for SG Wholesalers (${STORE_WHATSAPP_DISPLAY}).`}{' '}
                     Total: <strong className="tabular-nums">{formatKSh(lastSubmitted.total)}</strong>.
                   </p>
                 </div>

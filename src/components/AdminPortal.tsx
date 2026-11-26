@@ -678,7 +678,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   if (statusLoading) {
     return (
       <div className="min-h-screen bg-stone-100 flex items-center justify-center p-6">
-        <p className="text-sm font-medium text-zinc-600">Loading SG Collections Admin...</p>
+        <p className="text-sm font-medium text-zinc-600">Loading SG Wholesalers Admin...</p>
       </div>
     );
   }
@@ -706,11 +706,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="text-center space-y-3 pt-1">
             <img
               src="/assets/aistudio/image_5584599e.png"
-              alt="SG Collections"
+              alt="SG Wholesalers"
               className="w-16 h-16 rounded-xl mx-auto object-cover bg-black border border-stone-200"
             />
             <h1 className="font-display text-2xl font-bold text-zinc-950">
-              {adminConfigured ? 'SG Collections Admin Login' : 'Set Up SG Admin Login'}
+              {adminConfigured ? 'SG Wholesalers Admin Login' : 'Set Up SG Wholesalers Admin'}
             </h1>
             <p className="text-sm text-zinc-600">
               {adminConfigured
@@ -877,11 +877,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="flex items-center gap-3">
             <img
               src="/assets/aistudio/image_5584599e.png"
-              alt="SG Collections"
+              alt="SG Wholesalers"
               className="w-9 h-9 rounded-lg object-cover bg-black border border-zinc-700"
             />
             <div>
-              <p className="font-display text-base font-bold leading-none">SG Collections Admin</p>
+              <p className="font-display text-base font-bold leading-none">SG Wholesalers Admin</p>
               <p className="text-[11px] text-zinc-400 mt-0.5">
                 Signed in as <strong className="text-white">{adminUsername}</strong>
               </p>
@@ -1649,7 +1649,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <a
                           href={buildWhatsAppUrl(
                             order.customerPhone,
-                            `Hello ${order.customerName}, update on your SG Collections order ${order.orderNumber} (${formatKSh(order.totalAmount)}): Status is now ${order.status}.`
+                            `Hello ${order.customerName}, update on your SG Wholesalers order ${order.orderNumber} (${formatKSh(order.totalAmount)}): Status is now ${order.status}.`
                           )}
                           target="_blank"
                           rel="noopener noreferrer"

@@ -250,7 +250,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               <div className="flex items-center gap-2 text-xs text-zinc-600 bg-stone-50 border border-stone-200 rounded-lg px-3.5 py-2.5">
                 <Truck className="w-4 h-4 text-amber-700 shrink-0" />
                 <span>
-                  Same-day Nairobi doorstep delivery available via <strong>GoLink Delivery Service</strong> &amp; worldwide dispatch.
+                  Same-day Nairobi doorstep delivery &amp; countrywide/worldwide dispatch available at checkout.
                 </span>
               </div>
             </div>
